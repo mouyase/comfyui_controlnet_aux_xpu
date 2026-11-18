@@ -21,7 +21,9 @@ model_configs = {
 class DepthAnythingV2Detector:
     def __init__(self, model, filename):
         self.model = model
-        self.device = "cpu"
+        # Track the device the weights actually live on instead of assuming
+        # CPU: the node wrapper may have already moved the model to XPU/CUDA.
+        self.device = next(model.parameters()).device
         self.filename = filename
     @classmethod
     def from_pretrained(cls, pretrained_model_or_path=None, filename="depth_anything_v2_vits.pth"):

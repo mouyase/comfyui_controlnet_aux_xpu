@@ -192,6 +192,27 @@ class DepthAnythingV2(nn.Module):
         
         return depth.cpu().numpy()
     
+    def _infer_device(self):
+        """Resolve the device this module actually lives on.
+
+        CUDA/MPS backend probing only knows about those two runtimes, so on
+        other accelerators (Intel XPU and friends) it silently falls back to
+        CPU. The caller has already moved the weights onto the accelerator,
+        which makes the input tensor and the weights disagree and blows up
+        inside the first conv2d with "Input type (torch.FloatTensor) and
+        weight type (XPUFloatType) should be the same". Reading the device off
+        the module itself is backend agnostic: cuda, xpu, mps and cpu all
+        resolve correctly.
+        """
+        try:
+            return next(self.parameters()).device
+        except StopIteration:
+            pass
+        try:
+            return next(self.buffers()).device
+        except StopIteration:
+            return torch.device("cpu")
+
     def image2tensor(self, raw_image, input_size=518):        
         transform = Compose([
             Resize(
@@ -213,8 +234,6 @@ class DepthAnythingV2(nn.Module):
         
         image = transform({'image': image})['image']
         image = torch.from_numpy(image).unsqueeze(0)
-        
-        DEVICE = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
-        image = image.to(DEVICE)
+        image = image.to(self._infer_device())
         
         return image, (h, w)
